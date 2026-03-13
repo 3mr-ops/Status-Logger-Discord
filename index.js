@@ -87,13 +87,16 @@ function getActivities(presence) {
   if (!presence?.activities?.length) return result;
 
   for (const a of presence.activities) {
+
     if (a.type === ActivityType.Playing && !result.game) {
       result.game = a.name || null;
     }
+
     if (a.type === ActivityType.Streaming && !result.streaming) {
       result.streaming = a.name || "Streaming";
     }
-    if (a.name === "Spotify" && !result.spotify) {
+
+    if (a.type === ActivityType.Listening && a.name === "Spotify" && !result.spotify) {
       const track = a.details || "Unknown track";
       const artist = a.state || "Unknown artist";
       result.spotify = `${track} — ${artist}`;
