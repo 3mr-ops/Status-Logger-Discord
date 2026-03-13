@@ -19,20 +19,12 @@ const WATCHED_FILE = path.join(DATA_DIR, "watched-users.json");
 function loadWatchedUsers() {
   try {
     if (!fs.existsSync(WATCHED_FILE)) {
-      fs.writeFileSync(WATCHED_FILE, JSON.stringify(["382984064564723714"], null, 2));
+      fs.writeFileSync(
+        WATCHED_FILE,
+        JSON.stringify(["382984064564723714"], null, 2)
+      );
     }
 
-    const data = JSON.parse(fs.readFileSync(WATCHED_FILE, "utf8"));
-    return new Set(Array.isArray(data) ? data : []);
-  } catch (err) {
-    console.error("Failed to load watched users:", err);
-    return new Set();
-  }
-}
-  try {
-    if (!fs.existsSync(WATCHED_FILE)) {
-      fs.writeFileSync(WATCHED_FILE, JSON.stringify(["382984064564723714"], null, 2));
-    }
     const data = JSON.parse(fs.readFileSync(WATCHED_FILE, "utf8"));
     return new Set(Array.isArray(data) ? data : []);
   } catch (err) {
@@ -150,6 +142,7 @@ function buildPresenceEmbed(member, userId, oldPresence, newPresence) {
   const nowUnix = Math.floor(Date.now() / 1000);
 
   let sessionText = "Not tracked yet";
+
   if (newStatus !== "offline" && oldStatus === "offline") {
     sessionStarts.set(userId, Date.now());
     sessionText = "Session started now";
@@ -158,16 +151,11 @@ function buildPresenceEmbed(member, userId, oldPresence, newPresence) {
     if (started) {
       sessionText = `Online for ${formatDuration(Date.now() - started)}`;
       sessionStarts.delete(userId);
-    } else {
-      sessionText = "Went offline";
     }
   } else {
     const started = sessionStarts.get(userId);
     if (started) {
       sessionText = `Online for ${formatDuration(Date.now() - started)}`;
-    } else {
-      sessionStarts.set(userId, Date.now());
-      sessionText = "Session started now";
     }
   }
 
@@ -183,18 +171,6 @@ function buildPresenceEmbed(member, userId, oldPresence, newPresence) {
     else changes.push(`🔄 Switched game: **${oldA.game}** → **${newA.game}**`);
   }
 
-  if (oldA.streaming !== newA.streaming) {
-    if (!oldA.streaming && newA.streaming) changes.push(`📺 Started streaming **${newA.streaming}**`);
-    else if (oldA.streaming && !newA.streaming) changes.push(`📴 Stopped streaming **${oldA.streaming}**`);
-    else changes.push(`📺 Changed stream: **${oldA.streaming}** → **${newA.streaming}**`);
-  }
-
-  if (oldA.spotify !== newA.spotify) {
-    if (!oldA.spotify && newA.spotify) changes.push(`🎵 Started Spotify: **${newA.spotify}**`);
-    else if (oldA.spotify && !newA.spotify) changes.push(`⏹️ Stopped Spotify`);
-    else changes.push(`🎵 Changed Spotify: **${newA.spotify}**`);
-  }
-
   if (!changes.length) return null;
 
   const embed = new EmbedBuilder()
@@ -202,11 +178,10 @@ function buildPresenceEmbed(member, userId, oldPresence, newPresence) {
     .setAuthor({ name: `${displayName} status update`, iconURL: avatar || undefined })
     .setThumbnail(avatar)
     .addFields(
-      { name: "Changes", value: changes.join("\n"), inline: false },
+      { name: "Changes", value: changes.join("\n") },
       { name: "Platform", value: platform, inline: true },
       { name: "Session", value: sessionText, inline: true },
-      { name: "User ID", value: `\`${userId}\``, inline: false },
-      { name: "Time", value: `<t:${nowUnix}:F>\n<t:${nowUnix}:R>`, inline: false }
+      { name: "User ID", value: `\`${userId}\`` }
     )
     .setFooter({ text: "Status Logger" })
     .setTimestamp();
@@ -236,71 +211,33 @@ client.on(Events.MessageCreate, async (message) => {
     return message.reply(`Now watching \`${id}\``);
   }
 
-  if (cmd === "!unwatch") {
-    const id = parts[1]?.replace(/[<@!>]/g, "");
-    if (!id) return message.reply("Usage: `!unwatch USER_ID` or `!unwatch @user`");
-
-    watchedUsers.delete(id);
-    saveWatchedUsers(watchedUsers);
-    sessionStarts.delete(id);
-    return message.reply(`Stopped watching \`${id}\``);
-  }
-
   if (cmd === "!watchlist") {
     if (!watchedUsers.size) {
       return message.reply("No watched users.");
     }
 
     const lines = [];
-
     for (const id of watchedUsers) {
-      try {
-        const user = await client.users.fetch(id).catch(() => null);
-
-        if (user) {
-          lines.push(`• **${user.username}** (\`${id}\`)`);
-        } else {
-          lines.push(`• Unknown user (\`${id}\`)`);
-        }
-      } catch {
-        lines.push(`• Unknown user (\`${id}\`)`);
-      }
+      const user = await client.users.fetch(id).catch(() => null);
+      if (user) lines.push(`• **${user.username}** (\`${id}\`)`);
     }
 
-    return message.reply({
-      content: `**Watched Users**\n${lines.join("\n")}`
-    });
+    return message.reply(`**Watched Users**\n${lines.join("\n")}`);
   }
 });
+
 client.on(Events.PresenceUpdate, async (oldPresence, newPresence) => {
-  try {
-    const userId = newPresence?.userId || oldPresence?.userId;
-    if (!userId || !watchedUsers.has(userId)) return;
+  const userId = newPresence?.userId || oldPresence?.userId;
+  if (!userId || !watchedUsers.has(userId)) return;
 
-    const oldStatus = getStatusName(oldPresence);
-    const newStatus = getStatusName(newPresence);
-    const oldA = getActivities(oldPresence);
-    const newA = getActivities(newPresence);
+  const channel = await client.channels.fetch(LOG_CHANNEL_ID).catch(() => null);
+  if (!channel || !channel.isTextBased()) return;
 
-    const changed =
-      oldStatus !== newStatus ||
-      oldA.game !== newA.game ||
-      oldA.streaming !== newA.streaming ||
-      oldA.spotify !== newA.spotify;
+  const member = newPresence?.member || oldPresence?.member;
+  const embed = buildPresenceEmbed(member, userId, oldPresence, newPresence);
+  if (!embed) return;
 
-    if (!changed) return;
-
-    const channel = await client.channels.fetch(LOG_CHANNEL_ID).catch(() => null);
-    if (!channel || !channel.isTextBased()) return;
-
-    const member = newPresence?.member || oldPresence?.member;
-    const embed = buildPresenceEmbed(member, userId, oldPresence, newPresence);
-    if (!embed) return;
-
-    await channel.send({ embeds: [embed] });
-  } catch (err) {
-    console.error("Error in presenceUpdate:", err);
-  }
+  await channel.send({ embeds: [embed] });
 });
 
 client.login(TOKEN);
