@@ -1,3 +1,4 @@
+```js
 const fs = require("fs");
 const path = require("path");
 
@@ -101,6 +102,7 @@ function getActivities(presence) {
       const artist = a.state || "Unknown artist";
       result.spotify = `${track} — ${artist}`;
     }
+
   }
 
   return result;
@@ -121,6 +123,7 @@ function formatDuration(ms) {
 }
 
 function buildPresenceEmbed(member, userId, oldPresence, newPresence) {
+
   const oldStatus = getStatusName(oldPresence);
   const newStatus = getStatusName(newPresence);
 
@@ -149,13 +152,15 @@ function buildPresenceEmbed(member, userId, oldPresence, newPresence) {
   if (newStatus !== "offline" && oldStatus === "offline") {
     sessionStarts.set(userId, Date.now());
     sessionText = "Session started now";
-  } else if (newStatus === "offline") {
+  } 
+  else if (newStatus === "offline") {
     const started = sessionStarts.get(userId);
     if (started) {
       sessionText = `Online for ${formatDuration(Date.now() - started)}`;
       sessionStarts.delete(userId);
     }
-  } else {
+  } 
+  else {
     const started = sessionStarts.get(userId);
     if (started) {
       sessionText = `Online for ${formatDuration(Date.now() - started)}`;
@@ -172,6 +177,30 @@ function buildPresenceEmbed(member, userId, oldPresence, newPresence) {
     if (!oldA.game && newA.game) changes.push(`🎮 Started playing **${newA.game}**`);
     else if (oldA.game && !newA.game) changes.push(`🛑 Stopped playing **${oldA.game}**`);
     else changes.push(`🔄 Switched game: **${oldA.game}** → **${newA.game}**`);
+  }
+
+  if (oldA.streaming !== newA.streaming) {
+    if (!oldA.streaming && newA.streaming) {
+      changes.push(`📺 Started streaming **${newA.streaming}**`);
+    } 
+    else if (oldA.streaming && !newA.streaming) {
+      changes.push(`📴 Stopped streaming **${oldA.streaming}**`);
+    } 
+    else {
+      changes.push(`📺 Changed stream: **${oldA.streaming}** → **${newA.streaming}**`);
+    }
+  }
+
+  if (oldA.spotify !== newA.spotify) {
+    if (!oldA.spotify && newA.spotify) {
+      changes.push(`🎵 Started Spotify: **${newA.spotify}**`);
+    } 
+    else if (oldA.spotify && !newA.spotify) {
+      changes.push(`⏹️ Stopped Spotify`);
+    } 
+    else {
+      changes.push(`🎵 Changed Spotify: **${newA.spotify}**`);
+    }
   }
 
   if (!changes.length) return null;
@@ -198,6 +227,7 @@ client.once(Events.ClientReady, () => {
 });
 
 client.on(Events.MessageCreate, async (message) => {
+
   if (message.author.bot) return;
   if (!message.guild) return;
   if (message.author.id !== ADMIN_USER_ID) return;
@@ -206,20 +236,24 @@ client.on(Events.MessageCreate, async (message) => {
   const cmd = parts[0]?.toLowerCase();
 
   if (cmd === "!watch") {
+
     const id = parts[1]?.replace(/[<@!>]/g, "");
     if (!id) return message.reply("Usage: `!watch USER_ID` or `!watch @user`");
 
     watchedUsers.add(id);
     saveWatchedUsers(watchedUsers);
+
     return message.reply(`Now watching \`${id}\``);
   }
 
   if (cmd === "!watchlist") {
+
     if (!watchedUsers.size) {
       return message.reply("No watched users.");
     }
 
     const lines = [];
+
     for (const id of watchedUsers) {
       const user = await client.users.fetch(id).catch(() => null);
       if (user) lines.push(`• **${user.username}** (\`${id}\`)`);
@@ -227,9 +261,11 @@ client.on(Events.MessageCreate, async (message) => {
 
     return message.reply(`**Watched Users**\n${lines.join("\n")}`);
   }
+
 });
 
 client.on(Events.PresenceUpdate, async (oldPresence, newPresence) => {
+
   const userId = newPresence?.userId || oldPresence?.userId;
   if (!userId || !watchedUsers.has(userId)) return;
 
@@ -238,9 +274,12 @@ client.on(Events.PresenceUpdate, async (oldPresence, newPresence) => {
 
   const member = newPresence?.member || oldPresence?.member;
   const embed = buildPresenceEmbed(member, userId, oldPresence, newPresence);
+
   if (!embed) return;
 
   await channel.send({ embeds: [embed] });
+
 });
 
 client.login(TOKEN);
+```
