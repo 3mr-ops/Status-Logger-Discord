@@ -15,8 +15,8 @@ if (!TOKEN) {
 
 const LOG_CHANNEL_ID = "1482116768414699630";
 const ADMIN_USER_ID = "382984064564723714";
-
-function loadWatchedUsers() {
+const DATA_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH || __dirname;
+const WATCHED_FILE = path.join(DATA_DIR, "watched-users.json");
   try {
     if (!fs.existsSync(WATCHED_FILE)) {
       fs.writeFileSync(WATCHED_FILE, JSON.stringify(["382984064564723714"], null, 2));
