@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+
 const {
   Client,
   GatewayIntentBits,
@@ -9,12 +10,9 @@ const {
 } = require("discord.js");
 
 const TOKEN = process.env.TOKEN;
-if (!TOKEN) {
-  throw new Error("TOKEN environment variable is missing.");
-}
-
 const LOG_CHANNEL_ID = "1482116768414699630";
 const ADMIN_USER_ID = "382984064564723714";
+
 const DATA_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH || __dirname;
 const WATCHED_FILE = path.join(DATA_DIR, "watched-users.json");
   try {
