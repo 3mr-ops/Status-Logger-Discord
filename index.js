@@ -17,13 +17,12 @@ const ADMIN_USER_ID = "382984064564723714";
 const DATA_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH || __dirname;
 const WATCHED_FILE = path.join(DATA_DIR, "watched-users.json");
 
+/* ---------------- WATCHLIST STORAGE ---------------- */
+
 function loadWatchedUsers() {
   try {
     if (!fs.existsSync(WATCHED_FILE)) {
-      fs.writeFileSync(
-        WATCHED_FILE,
-        JSON.stringify(["382984064564723714"], null, 2)
-      );
+      fs.writeFileSync(WATCHED_FILE, JSON.stringify([ADMIN_USER_ID], null, 2));
     }
 
     const data = JSON.parse(fs.readFileSync(WATCHED_FILE, "utf8"));
@@ -41,12 +40,16 @@ function saveWatchedUsers(set) {
 const watchedUsers = loadWatchedUsers();
 const sessionStarts = new Map();
 
+/* ---------------- STATUS CONFIG ---------------- */
+
 const STATUS_CONFIG = {
   online: { label: "Online", icon: "🟢", color: 0x57f287 },
   idle: { label: "Idle", icon: "🌙", color: 0xfee75c },
   dnd: { label: "Do Not Disturb", icon: "⛔", color: 0xed4245 },
   offline: { label: "Offline", icon: "⚫", color: 0x747f8d }
 };
+
+/* ---------------- CLIENT ---------------- */
 
 const client = new Client({
   intents: [
@@ -57,6 +60,8 @@ const client = new Client({
     GatewayIntentBits.MessageContent
   ]
 });
+
+/* ---------------- HELPERS ---------------- */
 
 function getStatusName(presence) {
   if (!presence) return "offline";
@@ -69,20 +74,24 @@ function getStatusDisplay(status) {
 
 function getPlatformInfo(presence) {
   const cs = presence?.clientStatus;
-  if (!cs) return "Offline / Unknown";
+  if (!cs) return "Offline";
 
   const out = [];
-  if (cs.desktop) out.push("PC");
-  if (cs.mobile) out.push("Mobile");
-  if (cs.web) out.push("Web");
-  return out.length ? out.join(", ") : "Unknown";
+  if (cs.desktop) out.push("💻 PC");
+  if (cs.mobile) out.push("📱 Mobile");
+  if (cs.web) out.push("🌐 Web");
+
+  return out.join(", ") || "Unknown";
 }
+
+/* ---------------- ACTIVITY DETECTION ---------------- */
 
 function getActivities(presence) {
   const result = {
     game: null,
     streaming: null,
-    spotify: null
+    spotify: null,
+    spotifyCover: null
   };
 
   if (!presence?.activities?.length) return result;
@@ -97,30 +106,36 @@ function getActivities(presence) {
       result.streaming = a.name || "Streaming";
     }
 
-    if (a.type === ActivityType.Listening && a.name === "Spotify" && !result.spotify) {
+    if (a.type === ActivityType.Listening && a.name === "Spotify") {
+
       const track = a.details || "Unknown track";
       const artist = a.state || "Unknown artist";
-      result.spotify = `${track} — ${artist}`;
-    }
 
+      result.spotify = track + " — " + artist;
+
+      if (a.assets?.largeImage) {
+        const img = a.assets.largeImage.replace("spotify:", "");
+        result.spotifyCover = "https://i.scdn.co/image/" + img;
+      }
+    }
   }
 
   return result;
 }
 
-function formatDuration(ms) {
-  if (!ms || ms < 0) return "0m";
-  const totalSeconds = Math.floor(ms / 1000);
-  const d = Math.floor(totalSeconds / 86400);
-  const h = Math.floor((totalSeconds % 86400) / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
+/* ---------------- TIME FORMAT ---------------- */
 
-  const parts = [];
-  if (d) parts.push(`${d}d`);
-  if (h) parts.push(`${h}h`);
-  parts.push(`${m}m`);
-  return parts.join(" ");
+function formatDuration(ms) {
+  if (!ms) return "0m";
+
+  const total = Math.floor(ms / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+
+  return h ? `${h}h ${m}m` : `${m}m`;
 }
+
+/* ---------------- EMBED BUILDER ---------------- */
 
 function buildPresenceEmbed(member, userId, oldPresence, newPresence) {
 
@@ -137,83 +152,87 @@ function buildPresenceEmbed(member, userId, oldPresence, newPresence) {
     userId;
 
   const avatar =
-    member?.user?.displayAvatarURL?.({ size: 256 }) ||
-    newPresence?.user?.displayAvatarURL?.({ size: 256 }) ||
-    oldPresence?.user?.displayAvatarURL?.({ size: 256 }) ||
+    member?.user?.displayAvatarURL({ size: 256 }) ||
     null;
 
   const statusInfo = getStatusDisplay(newStatus);
   const oldStatusInfo = getStatusDisplay(oldStatus);
   const platform = getPlatformInfo(newPresence || oldPresence);
+
   const nowUnix = Math.floor(Date.now() / 1000);
 
-  let sessionText = "Not tracked yet";
+  let sessionText = "Tracking...";
 
   if (newStatus !== "offline" && oldStatus === "offline") {
     sessionStarts.set(userId, Date.now());
-    sessionText = "Session started now";
-  } 
+    sessionText = "Session started";
+  }
+
   else if (newStatus === "offline") {
-    const started = sessionStarts.get(userId);
-    if (started) {
-      sessionText = `Online for ${formatDuration(Date.now() - started)}`;
+    const start = sessionStarts.get(userId);
+    if (start) {
+      sessionText = "Online for " + formatDuration(Date.now() - start);
       sessionStarts.delete(userId);
     }
-  } 
+  }
+
   else {
-    const started = sessionStarts.get(userId);
-    if (started) {
-      sessionText = `Online for ${formatDuration(Date.now() - started)}`;
+    const start = sessionStarts.get(userId);
+    if (start) {
+      sessionText = "Online for " + formatDuration(Date.now() - start);
     }
   }
 
   const changes = [];
 
   if (oldStatus !== newStatus) {
-    changes.push(`${oldStatusInfo.icon} **${oldStatusInfo.label}** → ${statusInfo.icon} **${statusInfo.label}**`);
+    changes.push(`${oldStatusInfo.icon} ${oldStatusInfo.label} → ${statusInfo.icon} ${statusInfo.label}`);
   }
 
   if (oldA.game !== newA.game) {
-    if (!oldA.game && newA.game) changes.push(`🎮 Started playing **${newA.game}**`);
-    else if (oldA.game && !newA.game) changes.push(`🛑 Stopped playing **${oldA.game}**`);
-    else changes.push(`🔄 Switched game: **${oldA.game}** → **${newA.game}**`);
+
+    if (!oldA.game && newA.game)
+      changes.push(`🎮 Started playing **${newA.game}**`);
+
+    else if (oldA.game && !newA.game)
+      changes.push(`🛑 Stopped playing **${oldA.game}**`);
+
+    else
+      changes.push(`🔄 Switched game: **${oldA.game} → ${newA.game}**`);
   }
 
   if (oldA.streaming !== newA.streaming) {
-    if (!oldA.streaming && newA.streaming) {
+
+    if (!oldA.streaming && newA.streaming)
       changes.push(`📺 Started streaming **${newA.streaming}**`);
-    } 
-    else if (oldA.streaming && !newA.streaming) {
-      changes.push(`📴 Stopped streaming **${oldA.streaming}**`);
-    } 
-    else {
-      changes.push(`📺 Changed stream: **${oldA.streaming}** → **${newA.streaming}**`);
-    }
+
+    else if (oldA.streaming && !newA.streaming)
+      changes.push(`📴 Stopped streaming`);
   }
 
   if (oldA.spotify !== newA.spotify) {
-    if (!oldA.spotify && newA.spotify) {
-      changes.push(`🎵 Started Spotify: **${newA.spotify}**`);
-    } 
-    else if (oldA.spotify && !newA.spotify) {
+
+    if (!oldA.spotify && newA.spotify)
+      changes.push(`🎵 Listening on Spotify\n**${newA.spotify}**`);
+
+    else if (oldA.spotify && !newA.spotify)
       changes.push(`⏹️ Stopped Spotify`);
-    } 
-    else {
-      changes.push(`🎵 Changed Spotify: **${newA.spotify}**`);
-    }
   }
 
   if (!changes.length) return null;
 
   const embed = new EmbedBuilder()
     .setColor(statusInfo.color)
-    .setAuthor({ name: `${displayName} status update`, iconURL: avatar || undefined })
-    .setThumbnail(avatar)
+    .setAuthor({
+      name: displayName + " activity",
+      iconURL: avatar
+    })
+    .setThumbnail(newA.spotifyCover || avatar)
     .addFields(
       { name: "Changes", value: changes.join("\n") },
       { name: "Platform", value: platform, inline: true },
       { name: "Session", value: sessionText, inline: true },
-      { name: "User ID", value: `\`${userId}\`` }
+      { name: "User ID", value: "`" + userId + "`" }
     )
     .setFooter({ text: "Status Logger" })
     .setTimestamp();
@@ -221,65 +240,80 @@ function buildPresenceEmbed(member, userId, oldPresence, newPresence) {
   return embed;
 }
 
+/* ---------------- BOT READY ---------------- */
+
 client.once(Events.ClientReady, () => {
-  console.log(`Bot is online as ${client.user.tag}`);
-  console.log(`Watching ${watchedUsers.size} users`);
+
+  console.log("Bot online as " + client.user.tag);
+  console.log("Watching " + watchedUsers.size + " users");
+
 });
 
-client.on(Events.MessageCreate, async (message) => {
+/* ---------------- COMMANDS ---------------- */
+
+client.on(Events.MessageCreate, async message => {
 
   if (message.author.bot) return;
   if (!message.guild) return;
   if (message.author.id !== ADMIN_USER_ID) return;
 
-  const parts = message.content.trim().split(/\s+/);
-  const cmd = parts[0]?.toLowerCase();
+  const args = message.content.trim().split(/\s+/);
+  const cmd = args[0]?.toLowerCase();
 
   if (cmd === "!watch") {
 
-    const id = parts[1]?.replace(/[<@!>]/g, "");
-    if (!id) return message.reply("Usage: `!watch USER_ID` or `!watch @user`");
+    const id = args[1]?.replace(/[<@!>]/g, "");
+    if (!id) return message.reply("Usage: !watch USER_ID");
 
     watchedUsers.add(id);
     saveWatchedUsers(watchedUsers);
 
-    return message.reply(`Now watching \`${id}\``);
+    message.reply("Now watching `" + id + "`");
   }
 
   if (cmd === "!watchlist") {
 
-    if (!watchedUsers.size) {
+    if (!watchedUsers.size)
       return message.reply("No watched users.");
-    }
 
     const lines = [];
 
     for (const id of watchedUsers) {
       const user = await client.users.fetch(id).catch(() => null);
-      if (user) lines.push(`• **${user.username}** (\`${id}\`)`);
+      if (user)
+        lines.push("• **" + user.username + "** (`" + id + "`)");
     }
 
-    return message.reply(`**Watched Users**\n${lines.join("\n")}`);
+    message.reply("**Watched Users**\n" + lines.join("\n"));
   }
 
 });
 
+/* ---------------- PRESENCE TRACKING ---------------- */
+
 client.on(Events.PresenceUpdate, async (oldPresence, newPresence) => {
 
   const userId = newPresence?.userId || oldPresence?.userId;
+
   if (!userId || !watchedUsers.has(userId)) return;
 
-  const channel = await client.channels.fetch(LOG_CHANNEL_ID).catch(() => null);
+  const channel = await client.channels
+    .fetch(LOG_CHANNEL_ID)
+    .catch(() => null);
+
   if (!channel || !channel.isTextBased()) return;
 
   const member = newPresence?.member || oldPresence?.member;
+
   const embed = buildPresenceEmbed(member, userId, oldPresence, newPresence);
 
   if (!embed) return;
 
-  await channel.send({ embeds: [embed] });
+  channel.send({ embeds: [embed] });
 
 });
+
+/* ---------------- LOGIN ---------------- */
 
 client.login(TOKEN);
 ```
