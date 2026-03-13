@@ -15,6 +15,20 @@ const ADMIN_USER_ID = "382984064564723714";
 
 const DATA_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH || __dirname;
 const WATCHED_FILE = path.join(DATA_DIR, "watched-users.json");
+
+function loadWatchedUsers() {
+  try {
+    if (!fs.existsSync(WATCHED_FILE)) {
+      fs.writeFileSync(WATCHED_FILE, JSON.stringify(["382984064564723714"], null, 2));
+    }
+
+    const data = JSON.parse(fs.readFileSync(WATCHED_FILE, "utf8"));
+    return new Set(Array.isArray(data) ? data : []);
+  } catch (err) {
+    console.error("Failed to load watched users:", err);
+    return new Set();
+  }
+}
   try {
     if (!fs.existsSync(WATCHED_FILE)) {
       fs.writeFileSync(WATCHED_FILE, JSON.stringify(["382984064564723714"], null, 2));
